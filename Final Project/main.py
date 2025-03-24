@@ -70,13 +70,14 @@ if process_url_clicked:
     main_placeholder.text("Step 3: Creating embeddings and building FAISS index... ✅")
     try:
         vectorstore_openai = FAISS.from_documents(docs, embeddings)
+        # Save the FAISS index locally
+        vectorstore_openai.save_local("faiss_index")
+        # Save the documents separately
+        with open("documents.pkl", "wb") as f:
+            pickle.dump(docs, f)
     except Exception as e:
         st.error(f"Error creating FAISS index: {e}")
         st.stop()
-
-    # Save FAISS index to a pickle file
-    with open(file_path, "wb") as f:
-        pickle.dump(vectorstore_openai, f)
 
     main_placeholder.success("FAISS index successfully built and saved!")
 
@@ -84,12 +85,18 @@ if process_url_clicked:
 query = main_placeholder.text_input("Ask a question about the articles:")
 
 if query:
-    if os.path.exists(file_path):
+    if os.path.exists("faiss_index"):
         main_placeholder.text("Loading FAISS index for retrieval...")
         try:
-            # Load the saved FAISS object
-            with open(file_path, "rb") as f:
-                vectorstore_openai = pickle.load(f)
+            # Load the embeddings
+            embeddings = OpenAIEmbeddings()
+            
+            # Load the FAISS index
+            vectorstore_openai = FAISS.load_local("faiss_index", embeddings)
+            
+            # Load the documents
+            with open("documents.pkl", "rb") as f:
+                docs = pickle.load(f)
 
             # Create retriever from loaded FAISS object
             retriever = vectorstore_openai.as_retriever()
