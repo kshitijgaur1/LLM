@@ -2,6 +2,7 @@ import os
 import streamlit as st
 import pickle
 import time
+import nltk
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
@@ -13,13 +14,20 @@ from dotenv import load_dotenv
 # Load environment variables (especially for OpenAI API key)
 load_dotenv()
 
+# Download required NLTK data
+try:
+    nltk.download('punkt')
+except Exception as e:
+    st.error(f"Error downloading NLTK data: {e}")
+
 st.title("RockyBot: News Research Tool 📈")
 st.sidebar.title("News Article URLs")
 
 urls = []
 for i in range(3):
     url = st.sidebar.text_input(f"URL {i+1}", placeholder="Enter news article URL")
-    urls.append(url)
+    if url.strip():  # Only add non-empty URLs
+        urls.append(url)
 
 process_url_clicked = st.sidebar.button("Process URLs")
 file_path = "faiss_store_openai.pkl"
@@ -28,11 +36,18 @@ main_placeholder = st.empty()
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.0)
 
 if process_url_clicked:
+    if not urls:
+        st.error("Please enter at least one valid URL!")
+        st.stop()
+        
     # Step 1: Load data from URLs
     loader = UnstructuredURLLoader(urls=urls)
     main_placeholder.text("Step 1: Loading data from URLs... ✅")
     try:
         data = loader.load()
+        if not data:
+            st.error("No content could be extracted from the provided URLs. Please check the URLs and try again.")
+            st.stop()
     except Exception as e:
         st.error(f"Error loading data: {e}")
         st.stop()
@@ -45,11 +60,19 @@ if process_url_clicked:
     )
     main_placeholder.text("Step 2: Splitting data into chunks... ✅")
     docs = text_splitter.split_documents(data)
+    
+    if not docs:
+        st.error("No text content could be extracted from the articles. Please try different URLs.")
+        st.stop()
 
     # Step 3: Generate embeddings and FAISS vector store
     embeddings = OpenAIEmbeddings()
     main_placeholder.text("Step 3: Creating embeddings and building FAISS index... ✅")
-    vectorstore_openai = FAISS.from_documents(docs, embeddings)
+    try:
+        vectorstore_openai = FAISS.from_documents(docs, embeddings)
+    except Exception as e:
+        st.error(f"Error creating FAISS index: {e}")
+        st.stop()
 
     # Save FAISS index to a pickle file
     with open(file_path, "wb") as f:
